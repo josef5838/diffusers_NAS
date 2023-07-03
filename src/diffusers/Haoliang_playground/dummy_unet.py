@@ -23,7 +23,7 @@ unet = UNet2DConditionModel(
     up_block_types=("CrossAttnUpBlock2D", "UpBlock2D"),
     cross_attention_dim=32,
 )
-print(type(unet.state_dict()))
+print(unet._get_name())
 # print(type(unet.down_blocks))
 # print()
 # print(unet.down_blocks)
