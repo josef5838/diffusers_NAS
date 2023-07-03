@@ -1,0 +1,134 @@
+<class 'torch.nn.modules.container.ModuleList'>
+
+ModuleList(
+  (0): DownBlock2D(
+    (resnets): ModuleList(
+      (0): ResnetBlock2D(
+        (norm1): GroupNorm(32, 32, eps=1e-05, affine=True)
+        (conv1): Conv2d(32, 32, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (time_emb_proj): Linear(in_features=128, out_features=32, bias=True)
+        (norm2): GroupNorm(32, 32, eps=1e-05, affine=True)
+        (dropout): Dropout(p=0.0, inplace=False)
+        (conv2): Conv2d(32, 32, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (nonlinearity): SiLU()
+      )
+      (1): ResnetBlock2D(
+        (norm1): GroupNorm(32, 32, eps=1e-05, affine=True)
+        (conv1): Conv2d(32, 32, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (time_emb_proj): Linear(in_features=128, out_features=32, bias=True)
+        (norm2): GroupNorm(32, 32, eps=1e-05, affine=True)
+        (dropout): Dropout(p=0.0, inplace=False)
+        (conv2): Conv2d(32, 32, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (nonlinearity): SiLU()
+      )
+    )
+    (downsamplers): ModuleList(
+      (0): Downsample2D(
+        (conv): Conv2d(32, 32, kernel_size=(3, 3), stride=(2, 2), padding=(1, 1))
+      )
+    )
+  )
+  (1): CrossAttnDownBlock2D(
+    (attentions): ModuleList(
+      (0): Transformer2DModel(
+        (norm): GroupNorm(32, 64, eps=1e-06, affine=True)
+        (proj_in): Conv2d(64, 64, kernel_size=(1, 1), stride=(1, 1))
+        (transformer_blocks): ModuleList(
+          (0): BasicTransformerBlock(
+            (norm1): LayerNorm((64,), eps=1e-05, elementwise_affine=True)
+            (attn1): Attention(
+              (to_q): Linear(in_features=64, out_features=64, bias=False)
+              (to_k): Linear(in_features=64, out_features=64, bias=False)
+              (to_v): Linear(in_features=64, out_features=64, bias=False)
+              (to_out): ModuleList(
+                (0): Linear(in_features=64, out_features=64, bias=True)
+                (1): Dropout(p=0.0, inplace=False)
+              )
+            )
+            (norm2): LayerNorm((64,), eps=1e-05, elementwise_affine=True)
+            (attn2): Attention(
+              (to_q): Linear(in_features=64, out_features=64, bias=False)
+              (to_k): Linear(in_features=32, out_features=64, bias=False)
+              (to_v): Linear(in_features=32, out_features=64, bias=False)
+              (to_out): ModuleList(
+                (0): Linear(in_features=64, out_features=64, bias=True)
+                (1): Dropout(p=0.0, inplace=False)
+              )
+            )
+            (norm3): LayerNorm((64,), eps=1e-05, elementwise_affine=True)
+            (ff): FeedForward(
+              (net): ModuleList(
+                (0): GEGLU(
+                  (proj): Linear(in_features=64, out_features=512, bias=True)
+                )
+                (1): Dropout(p=0.0, inplace=False)
+                (2): Linear(in_features=256, out_features=64, bias=True)
+              )
+            )
+          )
+        )
+        (proj_out): Conv2d(64, 64, kernel_size=(1, 1), stride=(1, 1))
+      )
+      (1): Transformer2DModel(
+        (norm): GroupNorm(32, 64, eps=1e-06, affine=True)
+        (proj_in): Conv2d(64, 64, kernel_size=(1, 1), stride=(1, 1))
+        (transformer_blocks): ModuleList(
+          (0): BasicTransformerBlock(
+            (norm1): LayerNorm((64,), eps=1e-05, elementwise_affine=True)
+            (attn1): Attention(
+              (to_q): Linear(in_features=64, out_features=64, bias=False)
+              (to_k): Linear(in_features=64, out_features=64, bias=False)
+              (to_v): Linear(in_features=64, out_features=64, bias=False)
+              (to_out): ModuleList(
+                (0): Linear(in_features=64, out_features=64, bias=True)
+                (1): Dropout(p=0.0, inplace=False)
+              )
+            )
+            (norm2): LayerNorm((64,), eps=1e-05, elementwise_affine=True)
+            (attn2): Attention(
+              (to_q): Linear(in_features=64, out_features=64, bias=False)
+              (to_k): Linear(in_features=32, out_features=64, bias=False)
+              (to_v): Linear(in_features=32, out_features=64, bias=False)
+              (to_out): ModuleList(
+                (0): Linear(in_features=64, out_features=64, bias=True)
+                (1): Dropout(p=0.0, inplace=False)
+              )
+            )
+            (norm3): LayerNorm((64,), eps=1e-05, elementwise_affine=True)
+            (ff): FeedForward(
+              (net): ModuleList(
+                (0): GEGLU(
+                  (proj): Linear(in_features=64, out_features=512, bias=True)
+                )
+                (1): Dropout(p=0.0, inplace=False)
+                (2): Linear(in_features=256, out_features=64, bias=True)
+              )
+            )
+          )
+        )
+        (proj_out): Conv2d(64, 64, kernel_size=(1, 1), stride=(1, 1))
+      )
+    )
+    (resnets): ModuleList(
+      (0): ResnetBlock2D(
+        (norm1): GroupNorm(32, 32, eps=1e-05, affine=True)
+        (conv1): Conv2d(32, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (time_emb_proj): Linear(in_features=128, out_features=64, bias=True)
+        (norm2): GroupNorm(32, 64, eps=1e-05, affine=True)
+        (dropout): Dropout(p=0.0, inplace=False)
+        (conv2): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (nonlinearity): SiLU()
+        (conv_shortcut): Conv2d(32, 64, kernel_size=(1, 1), stride=(1, 1))
+      )
+      (1): ResnetBlock2D(
+        (norm1): GroupNorm(32, 64, eps=1e-05, affine=True)
+        (conv1): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (time_emb_proj): Linear(in_features=128, out_features=64, bias=True)
+        (norm2): GroupNorm(32, 64, eps=1e-05, affine=True)
+        (dropout): Dropout(p=0.0, inplace=False)
+        (conv2): Conv2d(64, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+        (nonlinearity): SiLU()
+      )
+    )
+  )
+)
