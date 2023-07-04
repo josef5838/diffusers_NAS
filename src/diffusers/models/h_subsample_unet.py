@@ -1,31 +1,31 @@
-# Copyright 2022 The HuggingFace Team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+import os
+import sys
+
+# Get the directory path of the parent package
+parent_dir = os.path.dirname(os.path.abspath(__file__))
+parent_package_dir = os.path.join(parent_dir, 'diffusers')
+
+# Add the parent package directory to the Python module search path
+sys.path.append(parent_package_dir)
+
+import pdb
+
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
+from collections import OrderedDict
 
 import torch
 import torch.nn as nn
 import torch.utils.checkpoint
 import torch.nn.utils.prune as prune
 
-from ..configuration_utils import ConfigMixin, register_to_config
-from ..loaders import UNet2DConditionLoadersMixin
-from ..utils import BaseOutput, logging
-from .cross_attention import AttnProcessor
-from .embeddings import TimestepEmbedding, Timesteps
-from .modeling_utils import ModelMixin
-from .unet_2d_blocks import (
+from diffusers.configuration_utils import ConfigMixin, register_to_config
+from diffusers.loaders import UNet2DConditionLoadersMixin
+from diffusers.utils import BaseOutput, logging
+from diffusers.models.cross_attention import AttnProcessor
+from diffusers.models.embeddings import TimestepEmbedding, Timesteps
+from diffusers.models.modeling_utils import ModelMixin
+from diffusers.models.unet_2d_blocks import (
     CrossAttnDownBlock2D,
     CrossAttnUpBlock2D,
     DownBlock2D,
@@ -36,11 +36,11 @@ from .unet_2d_blocks import (
     get_up_block,
 )
 
-from .attention import AttentionBlock
-from .cross_attention import CrossAttention, CrossAttnAddedKVProcessor
-from .dual_transformer_2d import DualTransformer2DModel
-from .resnet import Downsample2D, FirDownsample2D, FirUpsample2D, ResnetBlock2D, Upsample2D
-from .transformer_2d import Transformer2DModel
+# from diffusers.models.attention import AttentionBlock
+# from diffusers.models.cross_attention import CrossAttention, CrossAttnAddedKVProcessor
+# from diffusers.models.dual_transformer_2d import DualTransformer2DModel
+# from diffusers.models.resnet import Downsample2D, FirDownsample2D, FirUpsample2D, ResnetBlock2D, Upsample2D
+# from diffusers.models.transformer_2d import Transformer2DModel
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
@@ -130,13 +130,17 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
         num_class_embeds: Optional[int] = None,
         upcast_attention: bool = False,
         resnet_time_scale_shift: str = "default",
-        down_blocks: nn.ModuleList=None,
-        mid_block: nn.Module=None,
-        up_blocks: nn.ModuleList=None,
+        down_blocks_copy: Optional[nn.ModuleList] = None,
+        mid_block_copy: Optional[nn.Module] = None,
+        up_blocks_copy: Optional[nn.ModuleList] = None,
     ):
         super().__init__()
 
         ###Haoliang: I add self.params so that we can initialize a similar instance
+        self.down_blocks = nn.ModuleList([])
+        self.mid_block = None
+        self.up_blocks = nn.ModuleList([])
+        
         self.params = {
             'sample_size':sample_size,
             'in_channels':in_channels,
@@ -187,9 +191,7 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
         else:
             self.class_embedding = None
 
-        self.down_blocks = nn.ModuleList([])
-        self.mid_block = None
-        self.up_blocks = nn.ModuleList([])
+        
 
         if isinstance(only_cross_attention, bool):
             only_cross_attention = [only_cross_attention] * len(down_block_types)
@@ -200,10 +202,10 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
         ###Haoliang:
         # I allow the passing of blocks directly as inputs
         ###    
-        if down_blocks is not None and up_blocks is not None and mid_block is not None:
-            self.down_blocks = down_blocks
-            self.mid_block = mid_block
-            self.up_blocks = up_blocks
+        if down_blocks_copy is not None and up_blocks_copy is not None and mid_block_copy is not None:
+            self.down_blocks = down_blocks_copy
+            self.mid_block = mid_block_copy
+            self.up_blocks = up_blocks_copy
         else:
             # down
             output_channel = block_out_channels[0]
@@ -313,6 +315,10 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
         self.conv_norm_out = nn.GroupNorm(num_channels=block_out_channels[0], num_groups=norm_num_groups, eps=norm_eps)
         self.conv_act = nn.SiLU()
         self.conv_out = nn.Conv2d(block_out_channels[0], out_channels, kernel_size=3, padding=1)
+        
+        up_blocks_copy = self.up_blocks
+        mid_block_copy = self.mid_block
+        down_blocks_copy = self.down_blocks
 
     @property
     def attn_processors(self) -> Dict[str, AttnProcessor]:
@@ -436,20 +442,6 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (CrossAttnDownBlock2D, DownBlock2D, CrossAttnUpBlock2D, UpBlock2D)):
             module.gradient_checkpointing = value
-
-    def subsample(self, scale_factor_for_each_layer: dict):
-        def fn_recursive_attn_processor(name: str, module: torch.nn.Module, processor):
-            if hasattr(module, "set_processor"):
-                if not isinstance(processor, dict):
-                    module.set_processor(processor)
-                else:
-                    module.set_processor(processor.pop(f"{name}.processor"))
-
-            for sub_name, child in module.named_children():
-                fn_recursive_attn_processor(f"{name}.{sub_name}", child, processor)
-
-        for name, module in self.named_children():
-            fn_recursive_attn_processor(name, module, processor)
 
 
     def forward(
@@ -598,61 +590,6 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
         return UNet2DConditionOutput(sample=sample)
 
 
-        
-
-def subsample_unet(unet: UNet2DConditionModel, scale_factors: Union(dict, float), metric="L1") -> UNet2DConditionModel:
-    '''
-    scale_factors: can either be a dict of factors or a universial factor across the net'''
-    # need a safety check?
-    # layer_count = len(unet.modules())
-    # if layer_count != len(scale_factors):
-    #     raise ValueError(
-    #             f"layer count {layer_count} does not match with the length of scale factor list {len(scale_factors)}"
-    #         )
-    
-    #subsample blocks by recursively constructing a new state dict and a new modulelist 
-    pruned_state_dict={}
-    
-            
-    def fn_recursive_subsample_block(name: str, module: torch.nn.Module, new_state_dict, new_ModuleList:nn.ModuleList):
-        if (
-            isinstance(module, nn.Linear) or 
-            isinstance(module, nn.Conv2d) or 
-            isinstance(module, nn.MaxPool2d) or 
-            isinstance(nn.AvgPool2d) or 
-            isinstance(module, nn.GroupNorm) or 
-            isinstance(module, nn.SiLU)
-        ):
-            
-            pruned = prune_layer(layer=module, prune_ratio=scale_factors[name], metric=metric)
-            #are we creating an entirely new state dict here?
-            new_state_dict[name] = pruned
-        elif isinstance(module, ResnetBlock2D): 
-            state_dict={}
-            for sub_name, child in module.named_children():
-                fn_recursive_subsample_block(f"{name}.{sub_name}", child, new_state_dict)
-            
-        elif isinstance(module, Transformer2DModel):
-            for child in module.children():
-                fn_recursive_subsample_block(child)
-        elif isinstance(module, CrossAttention):
-            for child in module.children():
-                fn_recursive_subsample_block(child)
-    #1.down
-    # for idx, down_block in enumerate(unet.down_blocks):
-    
-    # I need an instantiation of the model that allows me to modify the layers directly？
-    params = unet.params.copy()
-    ### do any necessary change of params here
-
-    # params['block_out_channels']=
-
-    return UNet2DConditionModel(**params, up_blocks=up, mid_block=mid, down_blocks=down)
-
-        
-
-def build_layer():
-    pass
 def prune_layer(layer, prune_ratio=0.0, strategy="structured", metric="L1"):
     weight = layer.weight.data
     
@@ -663,15 +600,82 @@ def prune_layer(layer, prune_ratio=0.0, strategy="structured", metric="L1"):
     #coarse weight pruning
     if strategy == "structured":
         if metric == "L1":
-            prune.ln_structured(layer, amount=prune_ratio, n=1, dim=0)
+            prune.ln_structured(module=layer, name='weight', amount=prune_ratio, n=1, dim=0)
         if metric == "L2":
-            prune.ln_structured(layer, amount=prune_ratio, n=2, dim=0)
+            prune.ln_structured(module=layer, name='weight', amount=prune_ratio, n=2, dim=0)
         if metric == "random":
-            prune.random_structured(layer, amount=prune_ratio)
+            prune.random_structured(module=layer, name='weight', amount=prune_ratio)
 
         pruned_weights = weight[layer.weight_mask.sum(dim=(1, 2, 3)) != 0]
-        pruned_bias = layer.bias.data[layer.weight_mask.sum(dim=(1, 2, 3)) != 0]
+        # pruned_bias = layer.bias.data[layer.weight_mask.sum(dim=(1, 2, 3)) != 0]
+        pruned_bias = layer.bias.data
         
         return pruned_weights, pruned_bias
 
-   
+
+def subsample_block(block: torch.nn.Module, prune_ratio: float, metric: str):
+    new_state_dict = OrderedDict()
+    new_ModuleList = nn.ModuleList([])
+
+    def recursive_prune(module_name: str, module: nn.Module):
+        if len(list(module.children())) == 0:  # Leaf module, no children
+            if isinstance(module, nn.Conv2d):
+                pruned_weights, pruned_bias = prune_layer(layer=module, prune_ratio=prune_ratio, metric=metric)
+
+                # Create a new Conv2D layer with pruned parameters
+                new_layer = nn.Conv2d(pruned_weights.shape[1], pruned_weights.shape[0], module.kernel_size,
+                                      stride=module.stride, padding=module.padding, dilation=module.dilation,
+                                      groups=module.groups, bias=(pruned_bias is not None))
+                new_layer.weight = nn.Parameter(pruned_weights)
+                if pruned_bias is not None:
+                    new_layer.bias = nn.Parameter(pruned_bias)
+
+                new_ModuleList.append(new_layer)
+                new_state_dict[module_name + '.weight'] = pruned_weights
+                if pruned_bias is not None:
+                    new_state_dict[module_name + '.bias'] = pruned_bias
+            else:
+                new_ModuleList.append(module)  # Non-convolutional layer, just append
+                for param_name, param in module.named_parameters():
+                    new_state_dict[module_name + '.' + param_name] = param
+        else:
+            for child_name, child in module.named_children():
+                recursive_prune(module_name + '.' + child_name, child)
+
+    for name, module in block.named_children():
+        recursive_prune(name, module)
+
+    return new_ModuleList, new_state_dict
+
+if __name__ == "__main__":
+    torch.manual_seed(0)
+    unet = UNet2DConditionModel(
+        block_out_channels=(32, 64),
+        layers_per_block=2,
+        sample_size=32,
+        in_channels=4,
+        out_channels=4,
+        down_block_types=("DownBlock2D", "CrossAttnDownBlock2D"),
+        up_block_types=("CrossAttnUpBlock2D", "UpBlock2D"),
+        cross_attention_dim=32,
+    )
+
+    new_down_blocks, pruned_down_state_dict = subsample_block(unet.down_blocks, prune_ratio=0.2, metric='L1')
+    # new_down_blocks.load_state_dict(pruned_down_state_dict)
+
+    new_up_blocks, pruned_up_state_dict = subsample_block(unet.up_blocks, prune_ratio=0.2, metric='L1')
+    # new_up_blocks.load_state_dict(pruned_up_state_dict)
+
+    new_mid_block, pruned_mid_state_dict = subsample_block(unet.mid_block, prune_ratio=0.2, metric='L1')
+    # new_mid_block.load_state_dict(pruned_mid_state_dict)
+    
+    # new_unet, new_sd = subsample_block(unet,prune_ratio=0.2, metric='L1')
+    
+
+    new_unet = UNet2DConditionModel(**unet.params, up_blocks_copy=new_up_blocks, mid_block_copy=new_mid_block, down_blocks_copy=new_down_blocks) 
+    # new_unet.load_state_dict(new_sd)
+    
+    
+    # print(unet.down_blocks[0].state_dict().keys())
+    # print(type(new_down_blocks))
+    # print(len(new_down_blocks))
