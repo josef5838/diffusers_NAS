@@ -676,6 +676,6 @@ if __name__ == "__main__":
     # new_unet.load_state_dict(new_sd)
     
     
-    # print(unet.down_blocks[0].state_dict().keys())
+    print(new_unet.down_blocks)
     # print(type(new_down_blocks))
     # print(len(new_down_blocks))
