@@ -1,5 +1,7 @@
 import os
 import sys
+import copy
+from functools import reduce
 
 # Get the directory path of the parent package
 parent_dir = os.path.dirname(os.path.abspath(__file__))
@@ -590,63 +592,211 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
         return UNet2DConditionOutput(sample=sample)
 
 
-def prune_layer(layer, prune_ratio=0.0, strategy="structured", metric="L1"):
-    weight = layer.weight.data
+# def prune_layer(layer, prune_ratio=0.0, metric="L1"):
+#     weight = layer.weight.data
     
-    if prune_ratio == 0.0: return
-    # assert target in ["weight", "bias"], "You could only prune weight or bias!"
-    assert strategy in ["structured", "unstructured"], "Strategy has to be structured or unstructured!"
-    assert metric in ["L1", "L2", "random"], "L1, L2, or random"
-    #coarse weight pruning
-    if strategy == "structured":
-        if metric == "L1":
-            prune.ln_structured(module=layer, name='weight', amount=prune_ratio, n=1, dim=0)
-        if metric == "L2":
-            prune.ln_structured(module=layer, name='weight', amount=prune_ratio, n=2, dim=0)
-        if metric == "random":
-            prune.random_structured(module=layer, name='weight', amount=prune_ratio)
+#     if prune_ratio == 0.0: return
+#     # assert target in ["weight", "bias"], "You could only prune weight or bias!"
+#     # assert strategy in ["structured", "unstructured"], "Strategy has to be structured or unstructured!"
+#     assert metric in ["L1", "L2", "random"], "L1, L2, or random"
+#     #coarse weight pruning
+#     if metric == "L1":
+#         prune.ln_structured(module=layer, name='weight', amount=prune_ratio, n=1, dim=0)
+#     if metric == "L2":
+#         prune.ln_structured(module=layer, name='weight', amount=prune_ratio, n=2, dim=0)
+#     if metric == "random":
+#         prune.random_structured(module=layer, name='weight', amount=prune_ratio)
+
+#     pruned_weights = weight[layer.weight_mask.sum(dim=(1, 2, 3)) != 0]
+#     # pruned_bias = layer.bias.data[layer.weight_mask.sum(dim=(1, 2, 3)) != 0]
+#     bias = layer.bias.data
+    
+#     return pruned_weights, bias
+
+
+
+# def subsample_block(original_block: torch.nn.Module, prune_ratio: float, metric: str):
+#     # Start by making a deep copy of the original block
+#     new_block = copy.deepcopy(original_block)
+
+#     # Get all module names in a list
+#     module_names = [name for name, _ in original_block.named_modules()]
+
+#     for i in range(len(module_names)):
+#         name = module_names[i]
+#         module = dict(original_block.named_modules())[name]
+#         if isinstance(module, nn.Conv2d):
+#             pruned_weights, pruned_bias = prune_layer(layer=module, prune_ratio=prune_ratio, metric=metric)
+
+#             # Create a new Conv2D layer with pruned parameters
+#             new_layer = nn.Conv2d(pruned_weights.shape[1], pruned_weights.shape[0], module.kernel_size,
+#                                 stride=module.stride, padding=module.padding, dilation=module.dilation,
+#                                 groups=module.groups, bias=(pruned_bias is not None))
+#             new_layer.weight = nn.Parameter(pruned_weights)
+#             if pruned_bias is not None:
+#                 new_layer.bias = nn.Parameter(pruned_bias)
+
+#             # Replace the module in new_block with the pruned version
+#             parent, _, attr = name.rpartition('.')
+#             parent_module = new_block
+#             if parent:
+#                 parent_module = reduce(getattr, parent.split('.'), new_block)
+#             setattr(parent_module, attr, new_layer)
+
+#             # If there is a next layer and it is a Conv2d layer, adjust its input channels
+#             if i + 1 < len(module_names):
+#                 next_name = module_names[i + 1]
+#                 next_module = dict(new_block.named_modules())[next_name]
+#                 if isinstance(next_module, nn.Conv2d):
+#                     new_next_layer = nn.Conv2d(pruned_weights.shape[0], next_module.out_channels, next_module.kernel_size,
+#                                             stride=next_module.stride, padding=next_module.padding, dilation=next_module.dilation,
+#                                             groups=next_module.groups, bias=(next_module.bias is not None))
+#                     new_next_layer.weight = nn.Parameter(next_module.weight[:pruned_weights.shape[0]])
+#                     if next_module.bias is not None:
+#                         new_next_layer.bias = nn.Parameter(next_module.bias[:pruned_weights.shape[0]])
+
+#                     # Replace the next module in new_block with the adjusted version
+#                     next_parent, _, next_attr = next_name.rpartition('.')
+#                     next_parent_module = new_block
+#                     if next_parent:
+#                         next_parent_module = reduce(getattr, next_parent.split('.'), new_block)
+#                     setattr(next_parent_module, next_attr, new_next_layer)
+
+#     return new_block
+
+
+
+# Here is the old module list version
+# def subsample_block(block: torch.nn.Module, prune_ratio: float, metric: str):
+#     new_state_dict = OrderedDict()
+#     new_ModuleList = nn.ModuleList([])
+
+#     def recursive_prune(module_name: str, module: nn.Module):
+#         if len(list(module.children())) == 0:  # Leaf module, no children
+#             if isinstance(module, nn.Conv2d):
+#                 pruned_weights, bias = prune_layer(layer=module, prune_ratio=prune_ratio, metric=metric)
+
+#                 # Create a new Conv2D layer with pruned parameters
+#                 new_layer = nn.Conv2d(pruned_weights.shape[1], pruned_weights.shape[0], module.kernel_size,
+#                                       stride=module.stride, padding=module.padding, dilation=module.dilation,
+#                                       groups=module.groups, bias=(bias is not None))
+#                 new_layer.weight = nn.Parameter(pruned_weights)
+#                 if bias is not None:
+#                     new_layer.bias = nn.Parameter(bias)
+
+#                 new_ModuleList.append(new_layer)
+#                 new_state_dict[module_name + '.weight'] = pruned_weights
+#                 if bias is not None:
+#                     new_state_dict[module_name + '.bias'] = bias
+#             else:
+#                 new_ModuleList.append(module)  # Non-convolutional layer, just append
+#                 for param_name, param in module.named_parameters():
+#                     new_state_dict[module_name + '.' + param_name] = param
+#         else:
+#             for child_name, child in module.named_children():
+#                 recursive_prune(module_name + '.' + child_name, child)
+
+#     for name, module in block.named_children():
+#         recursive_prune(name, module)
+
+#     return new_ModuleList, new_state_dict
+
+class Pruner:
+    def __init__(self, model: UNet2DConditionModel, prune_ratio: float, metric: str):
+        self.model = copy.deepcopy(model)
+        self.prune_ratio = prune_ratio
+        self.metric = metric
+
+    def prune_layer(self, layer: nn.Conv2d):
+        weight = layer.weight.data
+        if self.prune_ratio == 0.0: return
+        # assert target in ["weight", "bias"], "You could only prune weight or bias!"
+        # assert strategy in ["structured", "unstructured"], "Strategy has to be structured or unstructured!"
+        assert self.metric in ["L1", "L2", "random"], "L1, L2, or random"
+        #coarse weight pruning
+        if self.metric == "L1":
+            prune.ln_structured(module=layer, name='weight', amount=self.prune_ratio, n=1, dim=0)
+        if self.metric == "L2":
+            prune.ln_structured(module=layer, name='weight', amount=self.prune_ratio, n=2, dim=0)
+        if self.metric == "random":
+            prune.random_structured(module=layer, name='weight', amount=self.prune_ratio)
 
         pruned_weights = weight[layer.weight_mask.sum(dim=(1, 2, 3)) != 0]
         # pruned_bias = layer.bias.data[layer.weight_mask.sum(dim=(1, 2, 3)) != 0]
-        pruned_bias = layer.bias.data
+        bias = layer.bias.data
         
-        return pruned_weights, pruned_bias
+        return pruned_weights, bias
 
+    def prune_block(self, original_block: nn.Module):
+        # Start by making a deep copy of the original block
+        new_block = copy.deepcopy(original_block)
 
-def subsample_block(block: torch.nn.Module, prune_ratio: float, metric: str):
-    new_state_dict = OrderedDict()
-    new_ModuleList = nn.ModuleList([])
+        # Get all module names in a list
+        module_names = [name for name, _ in original_block.named_modules()]
 
-    def recursive_prune(module_name: str, module: nn.Module):
-        if len(list(module.children())) == 0:  # Leaf module, no children
+        for i in range(len(module_names)):
+            name = module_names[i]
+            module = dict(original_block.named_modules())[name]
             if isinstance(module, nn.Conv2d):
-                pruned_weights, pruned_bias = prune_layer(layer=module, prune_ratio=prune_ratio, metric=metric)
+                pruned_weights, pruned_bias = self.prune_layer(layer=module)
 
                 # Create a new Conv2D layer with pruned parameters
                 new_layer = nn.Conv2d(pruned_weights.shape[1], pruned_weights.shape[0], module.kernel_size,
-                                      stride=module.stride, padding=module.padding, dilation=module.dilation,
-                                      groups=module.groups, bias=(pruned_bias is not None))
+                                    stride=module.stride, padding=module.padding, dilation=module.dilation,
+                                    groups=module.groups, bias=(pruned_bias is not None))
                 new_layer.weight = nn.Parameter(pruned_weights)
                 if pruned_bias is not None:
                     new_layer.bias = nn.Parameter(pruned_bias)
 
-                new_ModuleList.append(new_layer)
-                new_state_dict[module_name + '.weight'] = pruned_weights
-                if pruned_bias is not None:
-                    new_state_dict[module_name + '.bias'] = pruned_bias
-            else:
-                new_ModuleList.append(module)  # Non-convolutional layer, just append
-                for param_name, param in module.named_parameters():
-                    new_state_dict[module_name + '.' + param_name] = param
-        else:
-            for child_name, child in module.named_children():
-                recursive_prune(module_name + '.' + child_name, child)
+                # Replace the module in new_block with the pruned version
+                parent, _, attr = name.rpartition('.')
+                parent_module = new_block
+                if parent:
+                    parent_module = reduce(getattr, parent.split('.'), new_block)
+                setattr(parent_module, attr, new_layer)
 
-    for name, module in block.named_children():
-        recursive_prune(name, module)
+                # If there is a next layer and it is a Conv2d layer, adjust its input channels
+                if i + 1 < len(module_names):
+                    next_name = module_names[i + 1]
+                    next_module = dict(new_block.named_modules())[next_name]
+                    if isinstance(next_module, nn.Conv2d):
+                        new_next_layer = nn.Conv2d(pruned_weights.shape[0], next_module.out_channels, next_module.kernel_size,
+                                                stride=next_module.stride, padding=next_module.padding, dilation=next_module.dilation,
+                                                groups=next_module.groups, bias=(next_module.bias is not None))
+                        new_next_layer.weight = nn.Parameter(next_module.weight[:pruned_weights.shape[0]])
+                        if next_module.bias is not None:
+                            new_next_layer.bias = nn.Parameter(next_module.bias[:pruned_weights.shape[0]])
 
-    return new_ModuleList, new_state_dict
+                        # Replace the next module in new_block with the adjusted version
+                        next_parent, _, next_attr = next_name.rpartition('.')
+                        next_parent_module = new_block
+                        if next_parent:
+                            next_parent_module = reduce(getattr, next_parent.split('.'), new_block)
+                        setattr(next_parent_module, next_attr, new_next_layer)
 
+        return new_block
+    # to handle the mismatch caused by skip connections
+    def adjust_up_block(self, block: nn.Module, new_in_channels):
+        pass
+        # return adjusted_block
+
+    def prune_model(self):
+        # idea: old_model.named_modules[‘my_module_name’] = new_module
+
+        # prune down blocks
+        for i in range(len(self.model.down_blocks)):
+            self.model.down_blocks[i] = self.prune_block(self.model.down_blocks[i])
+            # Adjust the up block to match the new number of output channels from the pruned down block
+            # self.model.up_blocks[i] = self.adjust_up_block(self.model.up_blocks[i], self.model.down_blocks[i].out_channels)
+            
+        # prune up blocks
+        for i in range(len(self.model.down_blocks)):
+            self.model.up_blocks[i] = self.prune_block(self.model.up_blocks[i])
+            
+        # prune mid blocks
+        self.model.mid_block = self.prune_block(self.model.mid_block)
+        return self.model
+    
 if __name__ == "__main__":
     torch.manual_seed(0)
     unet = UNet2DConditionModel(
@@ -659,20 +809,27 @@ if __name__ == "__main__":
         up_block_types=("CrossAttnUpBlock2D", "UpBlock2D"),
         cross_attention_dim=32,
     )
+    
+    original_model = unet
+    prune_ratio=0.2
+    metric='L1'
+    
+    pruner = Pruner(original_model, prune_ratio, metric)
+    new_unet = pruner.prune_model()
 
-    new_down_blocks, pruned_down_state_dict = subsample_block(unet.down_blocks, prune_ratio=0.2, metric='L1')
-    # new_down_blocks.load_state_dict(pruned_down_state_dict)
+    # new_down_blocks = subsample_block(unet.down_blocks, prune_ratio=0.2, metric='L1')
+    # # new_down_blocks.load_state_dict(pruned_down_state_dict)
 
-    new_up_blocks, pruned_up_state_dict = subsample_block(unet.up_blocks, prune_ratio=0.2, metric='L1')
-    # new_up_blocks.load_state_dict(pruned_up_state_dict)
+    # new_up_blocks = subsample_block(unet.up_blocks, prune_ratio=0.2, metric='L1')
+    # # new_up_blocks.load_state_dict(pruned_up_state_dict)
 
-    new_mid_block, pruned_mid_state_dict = subsample_block(unet.mid_block, prune_ratio=0.2, metric='L1')
+    # new_mid_block = subsample_block(unet.mid_block, prune_ratio=0.2, metric='L1')
     # new_mid_block.load_state_dict(pruned_mid_state_dict)
     
     # new_unet, new_sd = subsample_block(unet,prune_ratio=0.2, metric='L1')
     
 
-    new_unet = UNet2DConditionModel(**unet.params, up_blocks_copy=new_up_blocks, mid_block_copy=new_mid_block, down_blocks_copy=new_down_blocks) 
+    # new_unet = UNet2DConditionModel(**unet.params, up_blocks_copy=new_up_blocks, mid_block_copy=new_mid_block, down_blocks_copy=new_down_blocks) 
     # new_unet.load_state_dict(new_sd)
     
     
