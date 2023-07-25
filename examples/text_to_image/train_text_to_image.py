@@ -497,6 +497,20 @@ def main():
     unet = UNet2DConditionModel.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="unet", revision=args.non_ema_revision
     )
+    ### Haoliang: masking
+    import torch.nn.utils.prune as prune
+    def prune_unet(unet, amount):
+        module_names = [name for name, _ in unet.named_modules()]
+        for i in range(len(module_names)):
+            name = module_names[i]
+            layer = dict(unet.named_modules())[name]
+            if not hasattr(layer, 'weight') or layer.weight.data.numel() == layer.weight.data.size(0):
+                continue
+            prune.ln_structured(module=layer, name='weight', amount=amount, n=1, dim=0)
+    
+    prune_unet(unet, 0.2)
+
+    ###
 
     # Freeze vae and text_encoder
     vae.requires_grad_(False)
