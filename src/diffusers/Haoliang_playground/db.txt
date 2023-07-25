@@ -1,5 +1,3 @@
-<class 'torch.nn.modules.container.ModuleList'>
-
 ModuleList(
   (0): DownBlock2D(
     (resnets): ModuleList(
