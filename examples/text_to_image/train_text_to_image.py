@@ -43,12 +43,12 @@ import diffusers
 from diffusers import AutoencoderKL, DDPMScheduler, StableDiffusionPipeline, UNet2DConditionModel
 from diffusers.optimization import get_scheduler
 from diffusers.training_utils import EMAModel
-from diffusers.utils import check_min_version, deprecate, is_wandb_available
+from diffusers.utils import check_min_version, deprecate#, is_wandb_available
 from diffusers.utils.import_utils import is_xformers_available
 
 
-if is_wandb_available():
-    import wandb
+#f is_wandb_available():
+import wandb
 
 
 # Will error if the minimal version of diffusers is not installed. Remove at your own risks.
@@ -427,7 +427,7 @@ def main():
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         mixed_precision=args.mixed_precision,
         log_with=args.report_to,
-        logging_dir=logging_dir,
+        project_dir=logging_dir,
         project_config=accelerator_project_config,
     )
 
